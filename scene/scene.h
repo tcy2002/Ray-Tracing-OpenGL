@@ -8,8 +8,7 @@
 #include "model/model.h"
 #include "material/material.h"
 
-#define MAX_FRAME 512
-#define MAX_ITER 8
+#define MAX_FRAME 2048
 
 class Scene {
 private:
@@ -17,10 +16,8 @@ private:
     DWORD start;
 
     int frame = 0;
-    int iter = 0;
-    int maxIter = 1;
-    GLuint fbo[MAX_ITER]{};
-    GLuint tbo[MAX_ITER]{};
+    GLuint fbo{};
+    GLuint tbo{};
 
     //着色器
     Shader *tracerShader; //光线追踪着色器
@@ -39,8 +36,8 @@ private:
 
 public:
     Scene();
+    ~Scene();
     void hitModel(GLfloat x, GLfloat y);
-    void incIter();
     void render();
 
 private:

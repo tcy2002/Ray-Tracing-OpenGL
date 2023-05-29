@@ -1,21 +1,19 @@
-#version 330
+#version 450 core
 
 #define PI 3.1415926
 #define INF 114514.0
 #define ERR 0.0001
 
 in vec3 position;
-out vec4 FragColor;
+layout (location = 0) out vec3 FragData;
 
 //屏幕参数
 uniform int width;
 uniform int height;
-vec2 pixel2d = vec2(2.0 / width, 2.0 / height);
 
 //帧数
 uniform int frame;
 uniform int maxFrame;
-uniform int iter;
 
 //上一帧的帧缓存
 uniform sampler2D lastFrame;
@@ -138,7 +136,7 @@ uniform CustomizedModel customized;//仅支持一个自定义模型
 uint seed = uint(
     uint((position.x * 0.5 + 0.5) * width) * 1973u +
     uint((position.y * 0.5 + 0.5) * height) * 9277u +
-    uint(frame + iter * maxFrame) * 26699u);
+    uint(frame * maxFrame) * 26699u);
 
 //哈希函数
 uint hash(inout uint seed) {
@@ -286,7 +284,7 @@ bool hitQuadModel(Ray r, in QuadModel quadM, inout HitInfo hit) {
         //纹理映射
         if (quadM.useTexture) {
             vec2 tex = quadTexCoord(quadM.quad.samples, hit.hitPoint);
-            vec3 color = texture2D(quadM.texture, tex).rgb;
+            vec3 color = texture(quadM.texture, tex).xyz;
             hit.material.color = color;
         }
     }
@@ -342,7 +340,7 @@ bool hitSphereModel(Ray r, in SphereModel sphM, inout HitInfo hit) {
         //纹理映射
         if (sphM.useTexture) {
             vec2 texc = sphereTexCoord(hit.normal);
-            vec3 color = texture2D(sphM.texture, texc).rgb;
+            vec3 color = texture(sphM.texture, texc).xyz;
             hit.material.color = color;
         }
         //折射率：射出时需要取倒数
@@ -437,7 +435,7 @@ bool hitCylinderModel(Ray r, in CylinderModel cylM, inout HitInfo hit) {
         //只有侧面有纹理映射
         if (cylM.useTexture && y > y_l && y < y_h) {
             vec2 tex = cylinderTexCoord(hit.hitPoint, cylM.cyl.center, cylM.cyl.height);
-            vec3 color = texture2D(cylM.texture, tex).rgb;
+            vec3 color = texture(cylM.texture, tex).xyz;
             hit.material.color = color;
         }
     }
@@ -511,7 +509,7 @@ bool hitCustomizedModel(Ray r, inout HitInfo hit) {
                     //纹理映射
                     if (customized.useTexture) {
                         vec2 tex = cylinderTexCoord(hit.hitPoint, customized.center, customized.height);
-                        vec3 color = texture2D(customized.texture, tex).rgb;
+                        vec3 color = texture(customized.texture, tex).xyz;
                         hit.material.color = color;
                     }
                     return true;
@@ -590,7 +588,10 @@ vec3 pathTracing(Ray r, int maxDepth) {
 //        color[depth] = hit.material.color;
 
         //若击中光源则返回
-        if (hit.material.lighting) break;
+        if (hit.material.lighting) {
+            color[depth] *= 2;
+            break;
+        }
 
         //光线与击中点法矢量的夹角余弦
         cosine[depth] = abs(dot(hit.normal, r.direction));
@@ -638,9 +639,9 @@ vec3 pathTracing(Ray r, int maxDepth) {
 void main() {
     //前一帧
     vec2 pixel = position.xy * 0.5 + 0.5;
-    vec3 lastColor = texture2D(lastFrame, pixel).rgb;
+    vec3 lastColor = texture(lastFrame, pixel).xyz;
     if (frame >= maxFrame) {
-        FragColor = vec4(lastColor, 1.0);
+        FragData = lastColor;
         return;
     }
 
@@ -649,13 +650,13 @@ void main() {
     r.startPoint = eyePos;
     vec3 screen = position;
     float d = rand(), th = rand() * (2.0 * PI);
-    screen.x += (d * sin(th) - 0.5) * pixel2d.x;
-    screen.y += (d * cos(th) - 0.5) * pixel2d.y;
+    screen.x += (d * sin(th) - 0.5) * (2.0 / width);
+    screen.y += (d * cos(th) - 0.5) * (2.0 / height);
     r.direction = normalize(screen - eyePos);
 
     //当前帧的像素颜色加上前一帧的像素颜色
-    vec3 color = pathTracing(r, 6) * (2.0 * PI);
+    vec3 color = pathTracing(r, 6);
     float rate = 1.0 / (frame + 1);
-    color = mix(lastColor, color, rate);
-    FragColor = vec4(color, 1.0);
+//    FragData = mix(lastColor, color * (2.0 * PI), rate);
+    FragData = lastColor + color * (2.0 * PI);
 }

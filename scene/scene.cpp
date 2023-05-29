@@ -13,14 +13,12 @@ Scene::Scene() {
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vector3f), nullptr);
 
     //启用帧缓冲
-    glGenFramebuffers(MAX_ITER, fbo);
-    glGenTextures(MAX_ITER, tbo);
-    for (unsigned int i : tbo) {
-        glBindTexture(GL_TEXTURE_2D, i);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, ORI_WIDTH, ORI_HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    }
+    glGenFramebuffers(1, &fbo);
+    glGenTextures(1, &tbo);
+    glBindTexture(GL_TEXTURE_2D, tbo);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, ORI_WIDTH, ORI_HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     //设置模型
     Material *mat;
@@ -134,6 +132,11 @@ Scene::Scene() {
     start = GetTickCount();
 }
 
+Scene::~Scene() {
+    glDeleteFramebuffers(1, &fbo);
+    glDeleteTextures(1, &tbo);
+}
+
 void Scene::setMaterial(const std::string &name, Material *material) {
     tracerShader->setBool(name + ".lighting", material->lighting);
     tracerShader->setVec3(name + ".color", material->color);
@@ -197,6 +200,7 @@ void Scene::hitModel(GLfloat x, GLfloat y) {
     Ray r = {normalize(screenPoint - eyePos), eyePos};
     GLfloat minDist = 10.0f, t;
     int size = (int)models.size(), hit = -1;
+
     for (int i = 0; i < size; i++) {
         t = models[i]->hit(r);
         if (t > 0 && t < minDist) {
@@ -204,20 +208,10 @@ void Scene::hitModel(GLfloat x, GLfloat y) {
             hit = i;
         }
     }
+
     if (hit != -1) {
         models[hit]->setLighting();
         //重置
-        frame = 0;
-        iter = 0;
-        maxIter = 1;
-        finished = false;
-        start = GetTickCount();
-    }
-}
-
-void Scene::incIter() {
-    if (maxIter < MAX_ITER) {
-        maxIter++;
         frame = 0;
         finished = false;
         start = GetTickCount();
@@ -230,19 +224,18 @@ void Scene::render() {
 
     if (!finished) {
         //绑定自定义帧缓存
-        glBindFramebuffer(GL_FRAMEBUFFER, fbo[iter]);
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
         tracerShader->use();
         tracerShader->setInt("width", ORI_WIDTH);
         tracerShader->setInt("height", ORI_HEIGHT);
         tracerShader->setInt("frame", frame);
         tracerShader->setInt("maxFrame", MAX_FRAME);
-        tracerShader->setInt("iter", iter);
         tracerShader->setVec3("eyePos", eyePos);
         tracerShader->setUint("V", (GLuint *) sobol, 64);
 
         //将前一帧的纹理加载到光线追踪着色器中
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, tbo[iter]);
+        glBindTexture(GL_TEXTURE_2D, tbo);
         tracerShader->setInt("lastFrame", 0);
 
         //将模型数据导入光线追踪着色器
@@ -272,34 +265,24 @@ void Scene::render() {
         tracerShader->setInt("sphereNum", nums[SPHERE]);
         tracerShader->setInt("cylinderNum", nums[CYLINDER]);
 
+        //将渲染结果加载到纹理中
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0_EXT, GL_TEXTURE_2D, tbo, 0);
+
         //绘制屏幕像素
         glBindVertexArray(VAO);
         glEnableVertexAttribArray(1);
         glDrawArrays(GL_QUADS, 0, 4);
-
-        //将渲染结果加载到纹理中
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tbo[iter], 0);
     }
 
     //重新绑定到默认帧缓存
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     renderShader->use();
-    renderShader->setBool("finished", finished);
+    renderShader->setInt("maxFrame", MAX_FRAME);
 
     //将当前帧的纹理加载到绘制着色器中
-    if (finished) {
-        renderShader->setInt("maxIter", maxIter);
-        for (int i = 0; i < MAX_ITER; i++) {
-            glActiveTexture(GL_TEXTURE0 + i);
-            glBindTexture(GL_TEXTURE_2D, tbo[i]);
-            sprintf(buf, "frameBuffer[%d]", i);
-            renderShader->setInt(buf, i);
-        }
-    } else {
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, tbo[iter]);
-        renderShader->setInt("frameBuffer[0]", 0);
-    }
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, tbo);
+    renderShader->setInt("frameBuffer", 0);
 
     //再次绘制屏幕像素
     glBindVertexArray(VAO);
@@ -307,12 +290,11 @@ void Scene::render() {
     glDrawArrays(GL_QUADS, 0, 4);
 
     //更新帧数
-    if (!finished && ++frame == MAX_FRAME) {
-        if (++iter < maxIter) frame = 0;
-        else finished = true;
-
+    if (frame < MAX_FRAME) {
+        frame++;
+    } else if (!finished){
+        finished = true;
         double rate = 1000.0 * MAX_FRAME / (GetTickCount() - start);
-        std::cout << "iter " << iter << " finished" << std::endl;
-        std::cout << "average framerate: " << rate << std::endl;
+        std::cout << "fn: " << MAX_FRAME << " fps: " << rate << std::endl;
     }
 }

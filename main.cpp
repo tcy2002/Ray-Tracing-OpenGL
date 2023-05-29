@@ -32,15 +32,11 @@ void frame() {
 }
 
 void mouse(int button, int state, int x, int y) {
-    if (state != 1) return;
-    if (button == 0) {
-        y -= (height - ORI_HEIGHT);
-        auto sx = (GLfloat)(2.0 * x / ORI_WIDTH - 1.0);
-        auto sy = (GLfloat)(1.0 - 2.0 * y / ORI_HEIGHT);
-        scene->hitModel(sx, sy);
-    } else if (button == 2) {
-        scene->incIter();
-    }
+    if (state != 1 || button != 0) return;
+    y -= (height - ORI_HEIGHT);
+    auto sx = (GLfloat)(2.0 * x / ORI_WIDTH - 1.0);
+    auto sy = (GLfloat)(1.0 - 2.0 * y / ORI_HEIGHT);
+    scene->hitModel(sx, sy);
 }
 
 int main(int argc, char *argv[]) {
