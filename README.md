@@ -10,7 +10,7 @@
 ### Sobol序列降噪
 ![降噪1](screenshots/noise1.png)
 
-### 迭代混合降噪
+### 迭代混合降噪（旧）
 ![降噪2](screenshots/noise2.png)
 
 ### 反走样
